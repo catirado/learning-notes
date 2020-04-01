@@ -43,11 +43,11 @@ Equipos multidisciplinares, todas las features necesarias para subir una feature
 - **QA sin QAS.** Muchas veces es cuello de botella, quitarlos. El equipo hace el testing, cross-testing, como se quiera.
 - **Scrum sin SM.** La figura de Scrum Master rotando dentro del equipo.
 - **Arquitectura sin arquitectos.** El skill de arquitecto está en todos los devs (más o menos desarrollado)
-- **Todos atacan /todos defienden**
+- **Todos atacan / todos defienden**
 
 ### 7. Atacar el Sprint
 
-En muchos equipos, si hay 10 historias, 10 personas, una persona está trabajando en cada tarea... **hay que trabajar en la historia con mayor proiridad la mayor gente posible sin que se moleste.**
+En muchos equipos, si hay 10 historias, 10 personas, una persona está trabajando en cada tarea... **hay que trabajar en la historia con mayor prioridad la mayor gente posible sin que se moleste.**
 
 El objetivo del equipo entregar la tarea con mayor prioridad aunque trabajes en otra historia Los stand-up deberían ser de decir si necesito ayuda para la tarea con mayor prioridad, y sino trabajo en ella, como puedo ayudar en la tarea con mayor prioridad.
 
