@@ -28,32 +28,34 @@ Todo el mundo despliega, hasta el más junior.
 
 Como developer identificar el coste de las partes y hablarlo con el PO. Muchas veces el 20% se una feature se lleva el 80% del coste de implementación.
 
-- **Caso A y Caso B.** P.ej. no unificar oidc de FB y Google en la misma historia. Son dos distintas.
+- **Caso A y Caso B.** P.ej. no unificar OIDC de Facebook y Google en la misma historia. Son dos distintas.
 - **Segmentación por usuarios.** No es lo mismo a nivel de escalado probar para un % pequeño.
 - **Segmentación por plataformas.** No pasa nada por sacar una feature sólo en una plataforma y medir su uso.
 
 ### 5. One click deploy y rollback
 
-Proceso de deploy automatizado pero no fliparse con el hype (k8s, microservicios), ya que no siempre aplica. No es lo mismo el estilo de juego para un equipo de tercera que para uno de champions.
+Proceso de deploy automatizado pero no *fliparse con el hype* (k8s, microservicios), ya que no siempre aplica. No es lo mismo el estilo de juego para un equipo de tercera que para uno de "champions".
 
 ### 6. Cuellos de botella
 
-Equipos multidisciplinares, todas las features necesarias para subir una feature a producción viven en el equipo, pero no en personas físicas.
+Equipos multidisciplinares, todas las habilidades necesarias para subir una feature a producción viven en el equipo, pero no en personas físicas.
 
-- **QA sin QAS.** Muchas veces es cuello de botella, quitarlos. El equipo hace el testing, cross-testing, como se quiera.
+- **QA sin QAS.** Muchas veces es un cuello de botella, quitarlos. El equipo hace el testing, cross-testing, como se quiera.
 - **Scrum sin SM.** La figura de Scrum Master rotando dentro del equipo.
 - **Arquitectura sin arquitectos.** El skill de arquitecto está en todos los devs (más o menos desarrollado)
 - **Todos atacan / todos defienden**
 
 ### 7. Atacar el Sprint
 
-En muchos equipos, si hay 10 historias, 10 personas, una persona está trabajando en cada tarea... **hay que trabajar en la historia con mayor prioridad la mayor gente posible sin que se moleste.**
+En muchos equipos, si hay 10 historias, 10 personas, una persona está trabajando en cada historia... **hay que trabajar en la historia con mayor prioridad la mayor gente posible sin que se moleste.**
 
-El objetivo del equipo entregar la tarea con mayor prioridad aunque trabajes en otra historia Los stand-up deberían ser de decir si necesito ayuda para la tarea con mayor prioridad, y sino trabajo en ella, como puedo ayudar en la tarea con mayor prioridad.
+El objetivo del equipo es entregar la tarea con mayor prioridad, aunque trabajes en otra historia.
+
+Los stand-up deberían servir para visibilizar si se necesita ayuda en la tarea con mayor prioridad. Sino trabajo en ella, ¿cómo puedo ayudar en la tarea con mayor prioridad?
 
 ### 8. RETROs
 
-¿Como podemos subir a producción más rápido, más frecuentemente y con mayor calidad?
+¿Cómo podemos subir a producción más rápido, más frecuentemente y con mayor calidad?
 
 Referencias:
 
