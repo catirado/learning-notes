@@ -623,7 +623,7 @@ Generic/extensible platform project. Tienes un proyecto, viene un cliente que qu
 
 El problema que tiene con microservices es que cogen un concepto de arquitectura lógica y lo acoplan uno a uno con un elemento de la arquitectura de despliegue. logical unit = deployment unit.
 
-## Service Structure - CQRS (4h17m)
+## Service Structure - CQRS (48m)
 
 CQRS como el enfoque, el proceso de segregar las responsabilidades en comandos y queries.
 
@@ -753,8 +753,129 @@ Role based security: Diferentes pantallas para roles distintos va a tablas disti
 Es tán seguro como in-memory caches, sino más.
 
 Usar para la premilinary validation in bussines rules before submiting a command.
-Enforce uniquiness, user name unique in a signup por ejemplo. 
 
+- Antes de submit data, comprobar si ya existe en el PVM.
+- Enforce uniquiness, user name unique in a signup por ejemplo.
+- Related entity existence. p.ej. address validation, validación de un nombre de calle
+
+Esto hace que tengamos menos comando rechazados, ya que evitamos mandar comando que sabemos que van a fallar.
+
+Ejemplo. Al intentar hacer sign-up, me fijo en el PVM pen front ara asegurarme que no exista. En el improbable caso de que esto haga que cuando llegue el comando realmente ese usuario exista, por signal-r notificamos al usuario de que su nombre ya esta cogido y que le hemos asignado otro. Esto escala mejor. Facilitar la UX a los usuarios que siguen el flujo normal.
+
+**Validation vs bussines rules**
+Validation:
+- is the input potentially good?
+- la estructura es correcta?
+- rangos, lengths, etc
+
+Bussines rules:
+- debemos hacer esto?
+- bassado en el estado actual del sistema
+
+> PEGAR DIAGRAMA
+
+Normalmente solo se hace las validations en front, esto es intentar mover alguna (no todo) de las reglas de negocio al front consiguiendo feedback mas temprano y evitamos tener que esperar la respuesta del commando (asincrono) porque igual ni la necesitamos.
+
+Otro ejemplo. En un carrito al hacer un add item, normalmente sacariamos el precio como respuesta de un comando pensamos que así sacamos los datos de verdad. ¿pero es así? puede que nos hayan cambiado por detrás el estado del producto y ya no esté a la venta, o incluso que se haya después de que yo haya entrado a la página (condition race...), lo tengo en múltiples tabs (esto se puede solucionar son SignalR).
+
+Casi cualquier if statement en un command encontramos detras un modelo colaborativo.
+
+Un comando casi nunca debe fallar, tiene éxito, y algunos tienen éxito pero de forma diferente.
+
+**¿Deberiamos hacer lo que el usuario pide?**
+
+En el pasado se hace mucho in-place edit, and then save when is ready. Esta bien para pequeño numero de usuarios, cada uno en su sandbox..
+
+```
+Id | Total | Account
+----------------------------------
+2        | 3,45$         | A100
+4        | 4,50$          | A234
+
+[SAVE]
+```
+
+Transactions boundaries, tu mandas un monton y un usuario ha modificado un record cuando tu estabas modificando, entonces cuando lo envias te rechaza toda la transacción... puedes pensar en hacer una transaccion por cada fila, pero puede que haya movimientos relacionados (tipo transaccion bancaria, etc.)
+
+Muchas veces lo complicado para los modelos de colaboración está en la UI... ui nacio pensando en un usuario único.
+
+P.ej. sistema de reservas (eventbrite) para reservar un asiento. necesitamos datos reales, no podemos usar un PVM... aqui lo anterior no funciona muy bien xk la mayoria de comandos van a fallar... aqui CQRS lo hace peor... aqui no podemos capturar la intención de usuario correctamente con esta UI (checkbox, user can select multiple seats? entonces cocurenccia ocupera el primero coge los asientos. ...) -> rethink user intentions to rethink UI. diseñar quien compra cada asiento es el problema, no podemos escalarlo.
+
+big problem -> subdivice in small problems.
+
+Capturing user inten
+group reservations (people want to si togheter), number of people, seat type (indicate cost), email back when reservation can be filled, include waiting list. O incluso particionar en VIP cliente (1ra venta de tiempo, quieren lo mejores asientos y pagaran extra), grupos (2do ventana, se quieren sentar juntos) y el resto (la ult, cogeran cualquier aasiento libre). Nos costará menos dinero y podremos cobrar menos dinero a lagente...
+
+CQRS is not an approach u can apply behind the scenes and supply the bussines as it was...
+
+¿Que es un buen comando? Los que puedes contestar con:
+- Gracias, tu email de confirmación te llegará pronto 
+- OR just fake it the UI (y di que se ha complentado aunque este en una cola)
+
+Inherently asyncronoes
+Not realmente relacionado con entidades
+
+### CQRS en acción
+
+> Meter un grafico de tipico de CQRS
+
+Cuando creamos un model optimizado para reads, normalmente no esta optimizado para actualizaciones. Lo que podemos hacer es batchear las actualizaciones del View Model, porque sino lo vamos a bloquear y vamos a tener el mismo problema.
+
+A veces utilizar la misma BD o replica como ViewModel, y no tener que mantener otra BD o vista distinta. CQRS es un enfoque.
+
+> pregunta, separate BC para libros que tienen mucha dmeanda y para los normales para poner distintas soluciones al tema del inventario. pero a veces puede cambiar de uno a otrao, eso no cuadra con la definición de BC, pero puede valer para nosotros.
+
+discounting rules, move this to the client? preguntarse si es colaborativo. entonces pueder ser sincrono, hablando directamente a la bd y cogiendo la respuesta...
+
+Resumen
+- Pensar en lecturas y escrituras de forma diferente. how many write in parallel? 
+- Reflejar las diferencias en los esquemas.
+- Diseñar comandos que casi nunca fallen (en un dominio colaborativo). Cambiar modelo de dominio, explicar que el modelo antiguo no escala. Es física, sino la única solución es pagar un montón.
+
+### Event sourcing
+
+Event Sourcing es un teérmino reciente, pero append only datamode is nothing new, de hecho transaction in databse (transaction logs). Se construy encima del concepto de transactin log, la distinción, es que son realmente eventos lógicos. La manera en la que escribimos la lógica debe ser tenida en cuenta y como un replay. transaction log tiene que ver solo con infra.
+
+> Pone el ejemplo del inventario, pero no es event source. Es más transaction log.
+
+event store definir a proyection para que puedas calcular SUM y tal. Pero no ve que la BD relacional tenga un weakness.
+
+No empezeis a utilizar como silver bullet. Ver para cada parte que funciona mejor.
+
+**Search, filter and group by any column (like Excel)**: Workaround, not true requirements... normalmente lo que quieren son reports... algo que podemos hacer que cubre el 70% -> la lista of top x files u opened it... porque normalmente, muchas veces vuelven a consultar lo mismo. Sino hacer un data-dump... y ahí igual no hace falta tenerlo joineado.
+
+Usuarios se han spoiled by google... igual usas full text search o lucene, eso funciona bien para un cierta cantidad de data... luego deja de funcionar. typeas smith y devuelves 10000 smiths... puede ser dificil dar un google like experiencia, lo que el usuaario quiere releventa result. cada vezque buscan y pinchan en el resultado, tendriamos que incrementar el relevant score... a menos que hagan click back... si buscar bar en google en casa, igual te dice para montar un bar o el bar de física, si buscas en el movil igual los bares cercanos.
+
+### Engine pattern
+
+disscount, risk, fraud... calculation involve a large number of factors. sobre varios servicios sin romper services boundaries.
+
+IT/ops esta muy involucrado. Alguien este en el equipo del engine y en el del dominio. Como rules engine, pero las reglas no tiene por que estar en el rule engine.
+
+the engine provide hooks, en el cual los servicios meten sus plugin. No llama el a los demás servicios.
+
+> GRAFICO de mi cuadero
+
+plugin model.
+
+No importa el orden de cual se aplica, son independientes.
+
+Combination of data, personal disscount... puede ser que te parezca que necesitas combinar datos, pero si haces el análisis necesario puedes descubrir que no. Trabajar con test cases para acordarlo con negocio.
+
+take the output of the engine y pasarla como entrada no rompe los services boundaries. o dentro del egine, que partes de distintos servicios tomen parte en la siguiente calculo, no es problema. igual podemos crear otro modelo estadistico que es igual de bueno sin romper boundaries.
+
+¿Como se le llama? a veces con un evento (order accepted -> trigger the engine pattern to calculate price) pero normalmente dentro se llama desde un servicio dentro del proceso de checkout por ejemplo.
+
+fraud como servicio no le cuadra mucho, no es un bussines capability... hariamos que los otros esrvicios publique cosas que normalmente no tendrian que publicar...
+
+se puede ver como un pipeline (price), o lanza eventos distintos dpend del resultdo (fraud)... depende del dominio. En price tiene sentido devolver un resultado para usarlo, en fraud no tanto.
+normalmente los retries y tal, queue, no aporta mucho aqui.
+
+a veces tiene logica el engine... separar lo que es puramente algoritmico y ques data bussines oriented.
+
+the code is part of it/ops, but maybe in a separate area. provee interfaces y diferentes plugin proveen implementaciones, tipo a meter varias patron strategies.
+
+* [Microservices and Rules Engines – a blast from the past](https://www.youtube.com/watch?v=Fuac__g928E)
 http://udidahan.com/2009/12/09/clarified-cqrs/
 http://udidahan.com/2011/04/22/when-to-avoid-cqrs/
 http://udidahan.com/2011/10/02/why-you-should-be-using-cqrs-almost-everywhere/
@@ -762,13 +883,238 @@ http://udidahan.com/2012/02/10/udi-greg-reach-cqrs-agreement/
 
 ## SOA: Operational aspects (1h23min)
 
-## Sagas/Long running bussines processes modeelings (1h14min)
+### Despliegue
 
-## Exercise: saga desing (1h13min)
+https://octopus.com/
+https://octopusadsd.particular.net/app
+
+Sistemas compuestos de multiples paquetes nuget, y paquetes nuget usados en multiples sistemas.
+
+La diferencia con microservios y usar paquetes nuget, tengo que actualizar en todos . La wakness si cambio un microservicio rompo todo. Con nuget puede ir actualizando distintas partes, por ejemplo solo el backend primero o solo en un servicio.
+
+Cuando creamos una versión del paquete NuGet sabemos que sistemas hay que tocar. Con este [script](https://gist.github.com/dvdstelt/2528b08ce2476e73e009433f419d632e) podemos hacerlo en Octopus.
+
+puede tener una cola o varias para cada AC, no es requisito tener varias.
+
+Tener varias partes es más complejo que tener un monolito.
+
+**Naming queues y processes**
+NameService.NameBC.NameAC
+El nombre de AC muy relacionado el tipo de mensaje o a la acción que responder. Billing.MonthyInvoice.OrderAccepted. Para los de front relacionado con el use case Customer.OnlineSystem.Search. Si es un front end component el nombre del sistema es usualmente parte. Para windows service/queues meter antes el nombre del proyecto.
+
+### Monitorización
+
+Ventajas de queue system. visibilidad del numbero que mensajes que las colas ingestan. Error queue notifies admin of problems. No preocuparse de las expceciones, mirar la cola de errores.
+
+* Nos ayuda a identificar cuellos de botella: Performance counters. \# of messages y el throughput (msgs/s) podemos saber cuanto va a costar procesar un mensaje en cada cola e incluse predecir cuando vamos a romper nuestro SLA.
+
+Si tenemos una cola compartida es más complicado, usar la cola compartida para los mensajes que sean críticos.
+
+### Escabalabilidad
+
+Competing Consumers pattern: Podemos tener varioss servidores cada uno corriendo una instancia del mismo componente autónomo.
+
+Usar un distributor, similar a un load balancer, cuando un new worker se pone online. sender side disbitrution aun más escalable (dsix??)
+
+> Dibujo
+
+**Virtulización**
+Ventajas de contendores, puedes conectar la monitorización con el sistema de escaalado. Podemos provisionar o desprovisionar más contendores cuando necesitemos más o menos recursos. Sistemas autoescalables, que funcionan bien en cloud servers.
+
+en queue bases env puede escalar mejor separdos, que con microservicios poruqe están más relacionados...
+
+### Fault-tolerance, backups, recuperación de destrastres
+
+**Fault tolerance**
+En un entorno vritualizado el disco duro C esta relamente almacenado en un fichero on the SAN. Asi que en un docker los mensajes estaría en ese fichero y podriamos recuperalo. Por lo que ya no necesitamos un broker centralizado para ser reliable. Aunque perdamos un ACI no pasa nada.
+
+**Backups**
+Si usamos SAN, si tienes las colas en SQL Server, con tener backups de BD sobra.
+Si usamos SAN, tanto los datos como la BD estara ahí. Hacer snapshots del SAN para tener un fully consistent backup. Usar el snapshot to disaster recovery a un point of time, tmb para data incosistency. Frequency of snapshot depends de cuanto tiempo estemos dispuestos a perder y el precio que cuesta mover esos datos cada X minutos.
+
+### Versionado
+Colas proveen temporal separation.
+
+Estrategia back to front: DB -> Server -> Message (contract) -> Cliente
+
+Si lo hacemos de esta manera evitamos garbage data, porque vamos más seguros, lo hacemos con más cuidado.
+
+Zero-downtime upgrades. install v2 mientras sigue v1. los dos alimentamos el mismo mensaje. Y cuando vemamos que no hay errores, quitamos la v1, todo con scripts automáticos en la CI. consideer hooking into CI.
+
+Componentes autónomos nos permite:
+
+* Flexibilidad
+* Escalabilidad
+* Monitorización
+* Versionado (nuget pakcages version)
+
+## Sagas/Long running bussines processes modelings
+
+**¿Que en un proceso?**
+Un proceso puede ser descrito como un conjunto de actividades que son performed en una cierta secuencia como resultado de triggers externo y externos.
+
+**¿Que es un long-running process?**
+A long-running proceso es un un proceso cuya ejecución lifetime excede el tiempo para procesar un single external evento o mensaje. Intermediano long, no sabemos cuando el siguiente trigger va a llegar.
+
+Long-running significa que multiples event/trigger externos son manejados por la misma instancia de un proceso - es *Stateful*.
+
+ejemplo de transferencia, el dinero sale de uno, pero aun no está en el otro... hay varios intermediarios... y el estado de compensacion si no se puede hacer, no vuelve todo el dinero... por fesss.
+
+Tiene un state management facility that enables a system to encpatusalte the logic and data for handlign an external stream of events.
+
+Think as Object Oriented progrmaming, ecapsular behaviour y se invoca con triggers (métodos) que modifican estado.
+
+Integration example. en vez de llamar a los demas distintos, lo invertimos y lo hacemos el punto central.
+
+> Meter dibujo
+
+#### Sagas
+
+Los triggers son mensajes.
+Similar a message handerls: pueden manejar un número diferente de tipos de mensajes
+Difierencia con message hanlders: tienen estado, message handerls not.
+
+Find existing Saga por id y la procesando hasta que todos los mensajes se complenten. Normalmente, después de long-runing process se publicara un evento o mensaje. En general no queremos que la saga modifique directamente un master data. Está enfocada en procesar estado (SRP). En general podemos borrar los estado intermedios cuando finalice.
+
+**Integration example. Request-response**
+Mandamos shipordermessage, itops habla con fedex o lo que esa y devuelve respuesta. podria llamar a varios servicios para ver cual es el más barato para este order por ejemplo.
+
+```csharp
+
+public class OrderProcessingSaga : Saga<OrderProcessingSaga.MyData>, IAmStarteByMessage<OrderMessage>,
+IHandleMessage<ShipOrderResponse>
+{
+    // este lo pone como internal class, ya que nadie más que la saga deberia usar esos datos
+    public class MyData : ContainSagaData { }
+
+    protected override ConfigureHowToFindSaga(SataPropertyMapper<MyData> mapper) { }  
+
+    public Task Handle(OrderMessage message, IMessgageHandlerContext context)
+    {
+        // aqui el bus coge el saga id y tipo hace un enrich del mensaje
+        return context.Send(new ShipOrderMessage());
+    }
+
+    public Task Handle(ShipOrderResponse message, IMessgageHandlerContext context)
+    {
+        MarkAsComplete();
+        return Task.CompletedTask;
+    }
+}
+
+public class ITOpsFedExIntegrationThing : IHandleMessage<ShipOrderMessage>{
+    public Task Handle(ShipOrderMessage message, IMessgageHandlerContext context){
+        // call FeDex
+        // el correlation id es relleando para el ShipOrderMessage, ¿coom se conecta con el saga id? aqui como copia los saga header de la request a la response, para que llega a la misma instancia de la saga
+        return context.Reply(new ShipOrderResponse());
+    }
+}
+```
+
+Depende de la tecnologia igual puedes hacer un lock de la saga.
+
+**Event driven saga**
+
+Puede ser empezada por aceptada o billed, pero si esta  billed ya busca no por aceptada. Este tipo de saga son tipicos como replacement de los reports.
+
+```csharp
+public class ShipOrderSaga : Saga<ShipOrderSaga.MyData>,
+IAmStarteByMessages<OrderAccepted>,
+IAmStarteByMessages<OrderBilled>
+{
+    public class MyData : ContainSagaData
+    {
+        public Guid OrderId {get;set;} //unique
+        public bool Accepted {get;set;}
+        public bool Billed {get;set;}
+    }
+
+    protected override ConfigureHowToFindSaga(SataPropertyMapper<MyData> mapper)
+    {
+        //Debemos garantizar uniqueness para el orderid property (esto NServiceBus lo hace by dfeault), para que no cree dos sagas con el mismo OrderId si llegan los mensajes a la vez
+
+        //lookup si encuentra la saga que tenga orderid como el de billed
+        mapper.ConfigureMapping<OrderBilled>(m => m.OrderId).ToSaga(s => s.OrderId);
+        //si no encuentra busca por aceptada
+        mapper.ConfigureMapping<OrderAccepted>(m => m.OrderId).ToSaga(s => s.OrderId);
+        //sino, creará una nueva
+    }  
+
+    public Task Handle(OrderAccepted message, IMessgageHandlerContext context)
+    {
+        Data.OrderId = message.OrderId;
+        Data.Accepted = true;
+
+        return ShipIfPossible(context);
+    }
+
+    public Task Handle(OrderBilled message, IMessgageHandlerContext context)
+    {
+        Data.OrderId = message.OrderId;
+        Data.Billed = true;
+
+        return ShipIfPossible(context);
+    }
+
+    Task ShipIfPossible(IMessgageHandlerContext context){
+        if (Data.Accepted && Data.Billed)
+        {
+            MarkAsComplete();
+            return context.Send(new ShipOrderMessage());
+        }
+        return Task.CompletedTask;
+    }
+}
+```
+
+**Time component**
+
+Necesitamos una manera de gestionar tiempos, y necesitamos que sea durable y transactions.
+
+```csharp
+public class ShipOrderSaga : Saga<ShipOrderSaga.MyData>,
+IAmStarteByMessages<OrderAccepted>,
+IAmStarteByMessages<OrderBilled>,
+IHandleTimeouts<OrderAccepted>
+{
+    //...
+
+    public Task Handle(OrderAccepted message, IMessgageHandlerContext context)
+    {
+        Data.OrderId = message.OrderId;
+        Data.Accepted = true;
+
+        RequestTimeout(context, TimeSpan.FromHours(24), message);
+
+        return ShipIfPossible(context);
+    }
+
+    public Task Timeout(OrderAccepted message, IMessgageHandlerContext context)
+    {
+        //if the behind some queue have defer sending of messages, le decimos que envie el mensaje después de x tiempo
+    }
+
+    //...
+}
+```
+
+Si algo es crucial que se ejecuta a las 12, necesitas algo de infra que te asegure que se esta ejeuntado a esa hora, porque los tiemout no te solucionan esto. Puede que tengas el servicio tirado 3 días.
+
+¿Que pasa si es 24 horas no tenemos respuesta de FedEx p.ej.? ¿Y no podemos enviar los productos? Igual podemos llamar a otro, hay que veces que después del tiemout hacemos otra cosa. Luego puede que fedex te de ok, e intentes cancelar post us, pero ya la haya dado el ok tambien... Al final hay que llevarlos a bussines, SLA con FedeEx que nos garantize respuesta, y entonces si ha pasado 24h no lo enviés...
+
+Scatter gather pattern: https://www.enterpriseintegrationpatterns.com/patterns/messaging/BroadcastAggregate.html
+
+### Exercise: saga design
+
+
+
 
 ## SOA: modeeling (1h14min)
 
+
+
 ## Organizatinoal transition to SOA (1h53m)
+
 
 ## Web Services and User interfaces (58m)
 
