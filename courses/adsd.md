@@ -623,7 +623,7 @@ Generic/extensible platform project. Tienes un proyecto, viene un cliente que qu
 
 El problema que tiene con microservices es que cogen un concepto de arquitectura lógica y lo acoplan uno a uno con un elemento de la arquitectura de despliegue. logical unit = deployment unit.
 
-## Service Structure - CQRS (48m)
+## Service Structure - CQRS
 
 CQRS como el enfoque, el proceso de segregar las responsabilidades en comandos y queries.
 
@@ -881,7 +881,7 @@ http://udidahan.com/2011/04/22/when-to-avoid-cqrs/
 http://udidahan.com/2011/10/02/why-you-should-be-using-cqrs-almost-everywhere/
 http://udidahan.com/2012/02/10/udi-greg-reach-cqrs-agreement/
 
-## SOA: Operational aspects (1h23min)
+## SOA: Operational aspects
 
 ### Despliegue
 
@@ -968,7 +968,7 @@ Integration example. en vez de llamar a los demas distintos, lo invertimos y lo 
 
 > Meter dibujo
 
-#### Sagas
+### Sagas
 
 Los triggers son mensajes.
 Similar a message handerls: pueden manejar un número diferente de tipos de mensajes
@@ -1104,19 +1104,173 @@ Si algo es crucial que se ejecuta a las 12, necesitas algo de infra que te asegu
 
 Scatter gather pattern: https://www.enterpriseintegrationpatterns.com/patterns/messaging/BroadcastAggregate.html
 
+http://udidahan.com/2009/04/20/saga-persistence-and-event-driven-architectures/
+
 ### Exercise: saga design
 
+No pasa nada por guardar datos en la bd como si fuese entidades en las sagas. Los datos de las sagas no son accesibles desde otros boundaries.
+
+General rule of thumb/dumb: don't try to model the real world, it does not exists :) phsycally realitty is almost indicendatally las responsabilidad. en amazon cuando entras en incongito eres un visitor, no un customer... a customer en reality un customer class... te pondrá en dirección incorrecta.
+
+El concepto de status es muy peligroso! casado, fallecido, favorito... en la mayoría de dominios nos puede dar problemas. Sospecha si una entidad tiene un campo llamado estado.
+
+Es fácil usar los distintos bloques (la implementación) de las sagas, lo complicado es analizar los procesos de negocio para identificar cuales deberían ser los pasos, los services boundaries...
+
+Cuando usamos un sistema legacy o 3rd party usamos una estructura similar a arquitectura hexágonal/port & adapters.
+> pintar imagen
+
+**Orquestación no es un servicio en sí mismo.**
+
+Divide los workflows/orquestadores a través de services boundaries.
+
+* Eventos son publicados al final of the sub-flow en un servicio
+* Eventos triggers a sub-flow in other services
+
+Sagas pueden ser usadas para CEP(complex event processing)/ESP(event stream processing).
+
+high-encapsulated, loosley coupled. las sagas son una buena unidad para unit testing. especialmente las de time-bound. es facil hacer un diagrama de sucuencia y luego hacer TDD de la saga.
+
+Use message building block to support long running processes.
+Si en batch processes usas las mismas datos que usan en front, eso es coupling! igual cambian un modelo y accidentalmente fasitidias un batch job. SRP. Con sagas. batch job great places to use sagas.
+
+Manten servicies boundaries explicit.
+
+## SOA: modeeling
+
+### Domain models
+
+No siempre ha existido el concepto. El EAA fue el librio que cambio todo.
+https://martinfowler.com/eaaCatalog/domainModel.html
+
+Esta compuesto de:
+
+* Propiedades
+* Métodos
+* Eventos
+
+**¿Cuando usarlo y cuando no?**
+“If you have complicated and everchanging business rules...”
+“If you have simple not-null checks and a couple of sums to calculate, a [Transaction Script](https://martinfowler.com/eaaCatalog/transactionScript.html) is a better bet”
+-- Martin Fowler EAA
+
+Es decir, no hay que usarlo en todo el bussines layer. Pero tiene un nombre tan bueno... no todo tiene que ser un domain model.
+
+Deben ser independientes. No depdender de UI, de BD (tampoco inyectando repositorios), ni de comunicaciones. Ya que encapsulan rules. Separation of concerns.
+
+Domain models hecho de [POJO's](https://martinfowler.com/bliki/POJO.html) no cuadran nuestra definición de domain model de EAA (puede que la Evans si). Por eso, si no tienes un reglas de negocio complicadas y que cambien, esta bien tener un conjunto de POJOs que nos ayuden a encapsular datos para persitir y recuperar los datos. Salio el patrón [Anemic Domain Model](https://martinfowler.com/bliki/AnemicDomainModel.html), pero es que no tiene porque serlo, esto son solo POJOs que quiero persistir, pero realmente nunca debiese haber sido un domain model.
+
+Son highly testable:
+- Register for events
+- Call a method
+- Check properties & events args
+
+Testearlo como black component en nuestro tests. people try to TDD their domain models...
+
+Si los escribimos así, hay probabilidades que al cambiar nuestro domain model, rompamos el test y tengamos que modificarlo.  
+
+```csharp
+[TestMethod]
+public void CreateOrderShouldConnectToCustomer() {
+    Customer c = new Customer();
+    Order o = c.CreateOrder();
+    Assert.AreEqual(c, o.Customer);
+}
+```
+
+Domain models pueden ser desplegados multi-tier. Nadie dice que sólo pueda ser uno. diferentes tipo de domain models para diferentes capas. Incluso no tiene porque ser escritos en diferentes lengaujes Js en front, c# en back, incluso t-sql en la bd.
+
+para algún nightly bacth de integation dentro de nuestros sistema igual tiene más sentido hacer difectamente con procedimientos en SQL, porque el contexto es distinto:
+
+* Otras partes de la organización ya esta usando estos datos, por lo que si los rechazamos ya hay gente que lo usa...
+* Tiene mejor rendimiento, line by line REST API...
+
+Massive file import, use database features to import, bulk. insert. ¿y para la lógica de esos datos que entran? entonces tiene más sentido tener el domain model en la BD... clean data, flag data as error...  es mover un script de 1mg vs mover 1tb de data... las pones en una tabla separadas, o quitas el flags y las integras con el resto de tu producción data... la lógica para ese contexto es distintas de transaction processing...
+
+### Concurrency models
+
+* Optimista (first one wins, last one wins, either way someone loses data)
+* Realistas
+* Pesimistas (alguien hace el lock y se va de vacaciones...) everyone has to stand in line and each data update is dealt with one at a time
+
+Hemos asumido que las transacciones. Beware of the false sense of security of wrapping things in a database transaction. By default, transactions operate in READ COMMITTED mode, so if the transaction does two reads, some computation, then an update, the things being read can be updated by other transactions before your transaction ends. CUando los ORMs se han vuelto populares, cada vez pensamos menos en como se comporta la bd... ni pensamos si necesitamos distintos modelo de isolación...
+
+#### Concurrencia realista
+Get current set of data before changing anything.
+
+> Get domain object (just ONE)
+> Ask it to update itself
+
+```csharp
+public void Handle(MakeCustomerPreferredMsg m) {
+    Customer c = s.Get<Customer>(m.CustomerId);
+    c.MakePreferred();
+}
+
+// MAL
+public void MakePreferred() {
+    foreach(Order o in this.UnshippedOrders){
+        foreach(Orderline ol in o.OrderLines){
+            ol.Discount(10.Percent);
+        }
+    }
+}
+```
+
+**Las relaciones entre entidades nos exponen a posibles inconsistencias!!**
+Otras transacciones pueden venir y hacer cambios sobre esas entidades.
+
+Si hemos seguido services boundaries, casi no tendremos relaciones. Entities BAD, entities relationships WORSE.
+Para single non-colaborative system esta bien usar entities, pero casi nadie ya construye algo así...
+
+Algunos cambios pueden ser concurrentes:
+- Tu cambia la dirección del cliente.
+- Yo actualizo el credit history del cliente.
+
+Otros no:
+- Tu cancelas el pedido.
+- Yo intento enviar el pedido.
+
+En estos, o ganas tú o yo, pero no ambos. Estan en distintos servicios, no podemos lanzar una transaccion sobre ellos... puede que pensemo que están mal las boundaries... intentar aguantar la tentación de volver a meterlo todo junto y romper las boundaries (aunque esa fácil). Si llegamos a una problema de estos de race condition -> CQRS
+
+In CQRS commands no fallan (pero aquí no podían ganar ambos...). Realmente race conditions no existen en bussines, un microsegundo no debería cambiar los objetivos de negocio.
+
+Buscar los underlying bussines objectives. Usar los [5 whys](https://en.wikipedia.org/wiki/Five_whys)
+Reglas:
+
+1. No se pueden cancelar pedidos enviados
+ Why? xk shipping cuesta dinero
+ So? That money would be lost if the customer cancelled  
+ Why? Because we refund the customers money
+2. No enviar pedidos cancelados
+
+Ahora vemos que el problema esta en Refund policies... otro servicio... el problema es dinero.
+
+Cuando un pedido es cancelado, el refund tiene que ser inmediato? No...
+Podemos hacer refund parciales? Si...
+Entonces podemos devolver el dinero del pedido - el shipping más tarde... así no nos preocupamos de race condition.
+
+Realmente cuando lo expresan igual están pensando en un día... y nosotros como ingenieros los convertimos en invariantes.. y hacemos que verdad al microsegundo...
+
+¿Que tiene que hacer el customer para conseguir el refund? Devolver los productos. 
+Simpre intentar entender la probablity distribution over time of a given option.
+
+> grafico cuaderno https://en.wikipedia.org/wiki/Buyer%27s_remorse
+
+¿puede que tenga sentido esperar pra publicar el evento ORderAccepted? ya que igual a los 30 minutos se producen la mayoría de cancelaciones... incluso se puede mejorar si un cliente nunca cancela le damos menos, si suele cancelar esperamos más, si es un producto que compro en el pasado...
+
+Al final vemos que tenemos a time-bound process, que podriamos modelar como una Saga. Sagas son muy testables. Saga single object, no teniendo refencias... deberian ser pojoness. son buenos candidatos para seguir el domain model pattern, más que las entities. una de las mejores implementacion de agreggate root. presevan consitency boundaries. 
+
+Les llama policy, refund policy o remorse policy. En soa nos enfocamos en modelar bussines capabilities y bussines policy. realmente en el mundo real veras que hay muchas policies... en vez de diseñar bussines procesos o bussines entities, ya que realmente true bussines world son más policies centry. capbabilities by services, y policies by sagas.
+
+La implementación de las sagas es similar a los actores. Pero no hemos intentado construir un actor... hemos venido de collaboriativde domains, commands can't fail, dig deeper in domain... y hemos llegado a este punto.
+
+## Organizational transition to SOA (1h53m)
 
 
-
-## SOA: modeeling (1h14min)
-
-
-
-## Organizatinoal transition to SOA (1h53m)
 
 
 ## Web Services and User interfaces (58m)
+
 
 ## Referencias
 
