@@ -15,6 +15,9 @@ Es muy subjetivo. ¿Que es el acoplamiento? Una medida de dependencias.
 
 https://stackoverflow.com/questions/15272195/what-is-the-difference-between-afferent-couplings-and-efferent-couplings-of-a-cl
 
+## Introducción to messaging
+
+
 ## Vendiendo messaging a tu organización
 
 Primeros pasos parar introducir:
@@ -1264,16 +1267,84 @@ Les llama policy, refund policy o remorse policy. En soa nos enfocamos en modela
 
 La implementación de las sagas es similar a los actores. Pero no hemos intentado construir un actor... hemos venido de collaboriativde domains, commands can't fail, dig deeper in domain... y hemos llegado a este punto.
 
-## Organizational transition to SOA (1h53m)
+## Organizational transition to SOA
 
+No hacemos big bang rewrite, no funcionan porque no tienes suficiente tiempo. Un importante valor en rewrites, pensar en que tenemos que hacer algo diferente y hay que pagar por ello... no intentes hacer SOA from scratch. rewrite tax, vas a pagar este tax in feature by fauturew rewrite batches... en vez de big rewrite.
 
+Pensar si la organización esta preparada para pagar la siguiente fase de tax. Cada feature costará el porcentaje de tasa más... para pasar a la siguiente fase, debemos estar preparados para pagar la tasa. el team se enfoca en que necesita para la siguiente fase.
 
+| Phase|Ops |Dev|Team|Duration| Tax |
+|---|---|---|---|---|---|
+|I|CI/CD-  *Med*|Unit testing - *Low*|Internal training (lunches, user groups) in good practices y conceptos de mensajeria y composite UI|3-9 months|5%
+|II|Source control- *Med*|*Med*|SOA|9-18 months|10%|
+|III|*Med*|*High*|SOA Domain Expertise. Team structure discussion|12-24 months|30% *(lo que nos cuesta 3 meses, nos costará un mes más!)*|
+|IV|*Med*|*Even Higher*|Reorganization teams|12 months-never|30%|
+
+**Phase I:** Around of each use case you generate an event. Aqui no metemos muchas cosas de queues, como mucho mandar un email, o usar la bd como queue...
+
+**Phase II:** Creamos subscriber dondoe aporten valor, en algunas features... no hacer big rewrites. samll refactoring, samlla composite UI... en Ops hay que empezar a crear colar y tal...
+
+**Phase III**: vas a necesitar tiempo para restabailizar... no sabes donde romper... sacar partes enteras (SOA). Empezando a enfocarnos en análisis de services boundaries. rewrite son más atractivos, pero casi nunca tienen éxito... report replacement. si el BBOM es the un 3rd party ?? experiencia para saber como de terrible es ese 3rd party, que limitaciones y constraints tiene... hasta que sea visible es díficil, es parte política...
+
+**Phase IV**: Ahora tenemos que atacar la bd monolítica. data migration no es nunca tan fácil como parece. migrate code is hard, migrate data is even harder. prepara solid group of people para la data migration. pero el desarrollo de nuevas features será más sencillo. Aqui ya tenedremos varios repos, con varios CI, nuget packages...
 
 ## Web Services and User interfaces (58m)
 
+### Caching
+
+#### In process caching
+
+Inprocess caching usually the first silver bullet cuando los usuarios dicen que va lento.
+Keeping the cache up to date acrross a server farm is complicado.
+A menudo requiere "sticky sesions" -> el problema con esto es que undermain the load balancer. no sabemos cuales van a ser muy activos y cuales son.
+
+#### Distributed caching
+
+No es un silver bullet. No todos los datos están guardados en cada nodo. Beware the tempation of loop!!! intermanete una cache hara un network para buscarlo en otro, puede que haga muchos roundtrips para deovlverte los datos. A veces añadir más máquinas hace más lento el sistema :(. si tienes que hacer join con la cache... sabes que tecnologia es buena haciendo joins!? SQL!
+
+Es bueno para buscar un valor a través de una key.  
+
+tip: wrapper arounda cache, y log warning si hace más de x llamadas...
+
+nunca vamo a tener suficiente memoria para cachear todo. 
+
+cache invalidation.  reads can interfere with writes and that hurts perfomance, más que si no hacemos ningún tipo de cache.
+
+Si empiezas a cacher por usuario, es peligroso... la probabilidad para encontrar algo en cache, decrece. solo cachear static data y no por usuario o por request. !!!hit rate??? mirarlo https://scalegrid.io/blog/6-crucial-redis-monitoring-metrics/
+y el response time de la cache... a veces con distributed, y round trips... es más lento que ir a la BD!!!!
+
+### CDN (Content Delivery Networks)
+
+serie de servidores espred internet avaiable to u pay as service to server static content, js, css, images... they propagate this files close and close u your users.
+
+Si tienes usuario por todo el mundo, en vez de hacer request to tu servidor las devuelves el CDN. cuanto más spread sea tu publico, mejor funciona. pero si todos tus usuarios están en todos londres y el CDN no tiene servidores en londres pues igual es peor.
+
+http://acme.com/imgs.jpg
+
+creas un subdomain
+http://content.acme.com
+
+y rediriges eso a un CDN, the netwowkr rerouting is behind the scenes. you pay for bandwith. normalmente son very cost effective para mejorar la experiencia de usuarios.
+
+page output caching, no pensar en toda la página, pensar en los más volatiles y. No ir al servidor todas las veces cuando hay cosas que casi no cambian. por ejemplo en Amazon el listado de departamentos. Diferentes granularidades de staticness behind the scenes. si preguntas a bussines cuando lo puedes cachear no van a saber... xk ellos les gusta que cuando lo cambies en backedn aparezca directamente... si te doy 100€ para mejor rendimiento cual querrias que se referesque más y cual menos, y hazme una lista... the static version of a dynamic web, pensar como si fuesen ficheros... es cacheado por el browser, incluso por el ISP, y por el CDN... si no está en uno buscaría en el otro intermediario hasta llegar a nuestra web sino lo encuentra, cuando más usuarios más se speradea por internet.
+
+Another problema, request in parallel (dependes on the brower), 16 parallel request per domain. Si alguno de ellos es servido por intermediarios, tenemos respuesta antes y nos llega menos request al servidor.
+
+### Personalization
+
+Ex. the weather widget:
+- Look up location by IP
+- Look up weather by location
+
+2 back-to-back remote calls to costly 3rd party services.
+
+Si son return visitor xk tengo que buscar siempre la IP, lo normal es que si vives en Londres cuando vuelvas estén en Londres aunque la IP sea distinta... cache user location así no tenemos que pedir cada vez... -> cookies or browser local-storage.
+
+El weather el london no cambia por user request, podemos cachearlo. Una cosa que podriamos hacer es evita query strings, usar slash. con http://weather.acme.com/london internet lo cachea, sin embargo http://weather.acme.com?q=London con query stirng no. cuando tiempo deberiamos decirle ainternet que cachee este recurso? seguro que no menos de una hora, lo cacheamos 60 minutos. Un millon de usuarios algunos llegaran a nuestro servidor, pero otros muchos usaran caches...
+
+breaking things down to the smallest components.
 
 ## Referencias
-
 * [Own the future](https://www.youtube.com/watch?v=2iYdKQXGY2E)
 * [Udi Dahan - If (domain logic) then CQRS, or Saga?](https://www.youtube.com/watch?v=fWU8ZK0Dmxs)
 * [Finding Service Boundaries – illustrated in healthcare](https://vimeo.com/showcase/3715841/video/113515335)
@@ -1287,7 +1358,6 @@ La implementación de las sagas es similar a los actores. Pero no hemos intentad
 * [Loosely-coupled orchestration with messaging](https://skillsmatter.com/skillscasts/5090-loosely-coupled-orchestration-with-messaging)
 * [Integration lessons for the green-field developer](https://www.youtube.com/watch?v=AXU4-VlAAcg)
 * [An Integrated Services Approach](https://skillsmatter.com/skillscasts/5235-keynote-an-integrated-services-approach)
-
 
 
 http://udidahan.com/2009/06/07/the-fallacy-of-reuse/
